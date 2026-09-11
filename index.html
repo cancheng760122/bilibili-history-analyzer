@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B站观看历史分析看板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: #f0f2f5;
+            color: #333;
+        }
+        .header {
+            background: linear-gradient(135deg, #fb7299 0%, #23ade5 100%);
+            color: white;
+            padding: 24px 40px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header h1 { font-size: 28px; margin-bottom: 8px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+        .upload-area {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            border: 2px dashed #d9d9d9;
+            transition: all 0.3s;
+            cursor: pointer;
+            margin-bottom: 24px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color: #fb7299;
+            background: #fff5f7;
+        }
+        .upload-area .icon { font-size: 48px; margin-bottom: 16px; }
+        .upload-area h3 { font-size: 18px; margin-bottom: 8px; color: #333; }
+        .upload-area p { color: #999; font-size: 14px; }
+        .upload-area input { display: none; }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .stat-card .label { font-size: 13px; color: #999; margin-bottom: 8px; }
+        .stat-card .value { font-size: 28px; font-weight: 600; color: #fb7299; }
+        .stat-card .sub { font-size: 12px; color: #bbb; margin-top: 4px; }
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: white;
+            padding: 8px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            flex-wrap: wrap;
+        }
+        .tab {
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            color: #666;
+        }
+        .tab:hover { background: #f5f5f5; }
+        .tab.active { background: #fb7299; color: white; font-weight: 500; }
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            margin-bottom: 24px;
+        }
+        .chart-container h3 {
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: #333;
+            padding-left: 10px;
+            border-left: 3px solid #fb7299;
+        }
+        .chart { width: 100%; height: 450px; }
+        .data-table {
+            margin-top: 16px;
+            max-height: 400px;
+            overflow: auto;
+            border-radius: 8px;
+            border: 1px solid #eee;
+        }
+        .data-table table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .data-table th {
+            background: #fafafa;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #666;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid #eee;
+        }
+        .data-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f5f5f5;
+            color: #444;
+        }
+        .data-table tr:hover { background: #fafafa; }
+        .insight-box {
+            background: linear-gradient(135deg, #fff5f7 0%, #e6f7ff 100%);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border-left: 4px solid #fb7299;
+        }
+        .insight-box h4 { font-size: 15px; margin-bottom: 12px; color: #fb7299; }
+        .insight-box ul { padding-left: 20px; }
+        .insight-box li { margin-bottom: 8px; font-size: 14px; color: #555; line-height: 1.6; }
+        .hidden { display: none; }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .loading .spinner {
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #fb7299;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 12px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .file-info {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: #0050b3;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-info button {
+            background: #ff4d4f;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .file-info button:hover { background: #ff7875; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 B站观看历史分析看板</h1>
+        <p>上传你的B站观看历史文件（CSV或JSON），自动生成全套交互式可视化分析 · 数据仅在本地浏览器处理，不上传服务器</p>
+    </div>
+
+    <div class="container">
+        <!-- 上传区域 -->
+        <div class="upload-area" id="uploadArea">
+            <div class="icon">📁</div>
+            <h3>点击或拖拽文件到此处上传</h3>
+            <p>支持 B站导出的 CSV 和 JSON 格式历史记录</p>
+            <input type="file" id="fileInput" accept=".csv,.json">
+        </div>
+        <div style="text-align:center;margin-bottom:24px;">
+            <button onclick="loadSampleData()" style="background:#23ade5;color:white;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;">🎲 加载示例数据预览效果</button>
+        </div>
+
+        <!-- 文件信息 -->
+        <div class="file-info hidden" id="fileInfo">
+            <span id="fileName"></span>
+            <button onclick="resetPage()">重新上传</button>
+        </div>
+
+        <!-- 加载中 -->
+        <div class="loading hidden" id="loading">
+            <div class="spinner"></div>
+            <p>正在解析数据...</p>
+        </div>
+
+        <!-- 分析结果 -->
+        <div id="resultArea" class="hidden">
+            <!-- 统计卡片 -->
+            <div class="stats-grid" id="statsGrid"></div>
+
+            <!-- 洞察 -->
+            <div class="insight-box" id="insightBox"></div>
+
+            <!-- 标签页 -->
+            <div class="tabs" id="tabs">
+                <div class="tab active" data-tab="daily">📈 每日趋势</div>
+                <div class="tab" data-tab="hour">⏰ 时段分布</div>
+                <div class="tab" data-tab="week">📅 星期分布</div>
+                <div class="tab" data-tab="author">👤 TOP UP主</div>
+                <div class="tab" data-tab="type">🏷️ 类型分布</div>
+                <div class="tab" data-tab="words">🔤 关键词词频</div>
+                <div class="tab" data-tab="raw">📄 原始数据</div>
+            </div>
+
+            <!-- 图表面板 -->
+            <div class="chart-container" id="panel-daily">
+                <h3>每日观看视频数量趋势</h3>
+                <div class="chart" id="chart-daily"></div>
+            </div>
+
+            <div class="chart-container hidden" id="panel-hour">
+                <h3>24小时观看分布（几点刷B站最多）</h3>
+                <div class="chart" id="chart-hour"></div>
+            </div>
+
+            <div class="chart-container hidden" id="panel-week">
+                <h3>星期观看数量分布</h3>
+                <div class="chart" id="chart-week"></div>
+            </div>
+
+            <div class="chart-container hidden" id="panel-author">
+                <h3>观看最多的15位UP主</h3>
+                <div class="chart" id="chart-author"></div>
+            </div>
+
+            <div class="chart-container hidden" id="panel-type">
+                <h3>视频类型分布</h3>
+                <div class="chart" id="chart-type"></div>
+            </div>
+
+            <div class="chart-container hidden" id="panel-words">
+                <h3>视频标题关键词TOP30</h3>
+                <div class="chart" id="chart-words"></div>
+            </div>
+
+            <div class="chart-container hidden" id="panel-raw">
+                <h3>原始数据（前100条）</h3>
+                <div class="data-table" id="rawTable"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局数据
+        let rawData = [];
+        let charts = {};
+
+        // 停用词
+        const stopWords = new Set(['的','了','是','在','和','有','就','都','而','及','与','之','也','不','很','还','这','那','我','你','他','她','它','什么','怎么','一个','一点','全部','看看','视频','B站','bilibili','我们','你们','他们','这个','那个','什么','怎么','如何','为什么','可以','已经','还是','就是','不是','没有','自己','一下','一些','一种','一样','真的','太','最','更','很','非常','特别','比较','其实','然后','因为','所以','如果','但是','而且','或者','虽然','不过','以及','等等','之类','这么','那么','怎样','咋样','啥','呗','呀','啊','吧','呢','嘛','哦','哈','嘿','哎']);
+
+        // 上传区域事件
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // 标签页切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const tabName = tab.dataset.tab;
+                ['daily','hour','week','author','type','words','raw'].forEach(name => {
+                    document.getElementById('panel-' + name).classList.toggle('hidden', name !== tabName);
+                });
+                // 重新调整图表大小
+                setTimeout(() => {
+                    Object.values(charts).forEach(c => c && c.resize());
+                }, 100);
+            });
+        });
+
+        // 加载示例数据
+        function loadSampleData() {
+            const sampleTitles = [
+                '鸣潮新版本攻略大全','战双帕弥什最新角色评测','数模国赛C题思路讲解',
+                'AI绘画入门教程','游戏推荐：这5款神作必玩','手机摄影技巧分享',
+                '清宵音乐合集','编程入门零基础教程','美食探店：城市隐藏美食',
+                '电影解说：高分悬疑片','健身减脂全攻略','旅行vlog：云南之旅',
+                '数码产品开箱测评','英语学习方法分享','动漫混剪：热血时刻',
+                '脱口秀合集','手工DIY教程','宠物日常搞笑视频',
+                '科技前沿资讯','职场干货：面试技巧'
+            ];
+            const sampleAuthors = ['凌痕QAQ','了不起天分的Nova','孤独音符','林粒粒呀','海棠家的大肥鱼','丸子','战双帕弥什','露露自信一点','兔兔不会秃秃','游戏推荐君','科技小王','美食家小李'];
+            const sampleTypes = ['视频','视频','视频','视频','直播','视频','视频','视频','视频','视频'];
+
+            const data = [];
+            const now = new Date();
+            for (let i = 0; i < 500; i++) {
+                const daysAgo = Math.floor(Math.random() * 60);
+                const hours = Math.floor(Math.random() * 24);
+                const minutes = Math.floor(Math.random() * 60);
+                const time = new Date(now.getTime() - daysAgo * 86400000);
+                time.setHours(hours, minutes, 0, 0);
+                data.push({
+                    title: sampleTitles[Math.floor(Math.random() * sampleTitles.length)],
+                    author: sampleAuthors[Math.floor(Math.random() * sampleAuthors.length)],
+                    time: time,
+                    type: sampleTypes[Math.floor(Math.random() * sampleTypes.length)],
+                    raw: {}
+                });
+            }
+            document.getElementById('fileName').textContent = '📄 示例数据 (500条模拟记录)';
+            document.getElementById('fileInfo').classList.remove('hidden');
+            document.getElementById('uploadArea').classList.add('hidden');
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('resultArea').classList.add('hidden');
+            setTimeout(() => processData(data), 500);
+        }
+
+        // 处理文件
+        function handleFile(file) {
+            document.getElementById('fileName').textContent = '📄 ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+            document.getElementById('fileInfo').classList.remove('hidden');
+            document.getElementById('uploadArea').classList.add('hidden');
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('resultArea').classList.add('hidden');
+
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (ext === 'csv') {
+                parseCSV(file);
+            } else if (ext === 'json') {
+                parseJSON(file);
+            } else {
+                alert('不支持的文件格式，请上传CSV或JSON文件');
+                resetPage();
+            }
+        }
+
+        // 解析CSV
+        function parseCSV(file) {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const data = results.data.map(row => {
+                        // 统一列名
+                        const author = row['作者'] || row['UP主'] || row['author'] || row['up主'] || '未知';
+                        const time = row['观看时间'] || row['view_at'] || row['时间'] || row['date'] || '';
+                        const title = row['标题'] || row['title'] || row['name'] || '';
+                        const type = row['类型'] || row['type'] || row['business'] || '视频';
+                        return {
+                            title: title,
+                            author: author,
+                            time: parseTime(time),
+                            type: type,
+                            raw: row
+                        };
+                    }).filter(r => r.time !== null);
+                    processData(data);
+                },
+                error: function(err) {
+                    alert('CSV解析失败: ' + err.message);
+                    resetPage();
+                }
+            });
+        }
+
+        // 解析JSON
+        function parseJSON(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    let list = [];
+                    if (Array.isArray(json)) {
+                        list = json;
+                    } else if (json.history && Array.isArray(json.history)) {
+                        list = json.history;
+                    } else if (json.data && Array.isArray(json.data)) {
+                        list = json.data;
+                    } else {
+                        // 找第一个数组
+                        for (let key in json) {
+                            if (Array.isArray(json[key])) {
+                                list = json[key];
+                                break;
+                            }
+                        }
+                    }
+
+                    const data = list.map(item => {
+                        if (typeof item !== 'object') return null;
+                        let time = null;
+                        if (item.view_at) {
+                            time = new Date(item.view_at * 1000);
+                        } else if (item.viewAt) {
+                            time = new Date(item.viewAt * 1000);
+                        } else if (item.pubdate) {
+                            time = new Date(item.pubdate * 1000);
+                        } else if (item.time) {
+                            time = parseTime(item.time);
+                        }
+                        return {
+                            title: item.title || '',
+                            author: item.author_name || item.author || item.uname || '未知',
+                            time: time,
+                            type: item.business || item.type || '视频',
+                            bvid: item.bvid || '',
+                            raw: item
+                        };
+                    }).filter(r => r && r.time !== null);
+
+                    processData(data);
+                } catch (err) {
+                    alert('JSON解析失败: ' + err.message);
+                    resetPage();
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // 解析时间字符串
+        function parseTime(str) {
+            if (!str) return null;
+            const d = new Date(str);
+            if (!isNaN(d.getTime())) return d;
+            // 尝试时间戳
+            const ts = parseInt(str);
+            if (!isNaN(ts)) {
+                if (ts > 1e12) return new Date(ts); // 毫秒
+                if (ts > 1e9) return new Date(ts * 1000); // 秒
+            }
+            return null;
+        }
+
+        // 处理数据并渲染
+        function processData(data) {
+            rawData = data;
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('resultArea').classList.remove('hidden');
+
+            // 统计
+            const total = data.length;
+            const dates = [...new Set(data.map(d => d.time.toDateString()))];
+            const authors = [...new Set(data.map(d => d.author))];
+            const minDate = new Date(Math.min(...data.map(d => d.time)));
+            const maxDate = new Date(Math.max(...data.map(d => d.time)));
+
+            // 统计卡片
+            document.getElementById('statsGrid').innerHTML = `
+                <div class="stat-card"><div class="label">总观看记录</div><div class="value">${total}</div><div class="sub">条视频</div></div>
+                <div class="stat-card"><div class="label">统计天数</div><div class="value">${dates.length}</div><div class="sub">天</div></div>
+                <div class="stat-card"><div class="label">时间范围</div><div class="value" style="font-size:16px;">${formatDate(minDate)}</div><div class="sub">至 ${formatDate(maxDate)}</div></div>
+                <div class="stat-card"><div class="label">关注UP主</div><div class="value">${authors.length}</div><div class="sub">位</div></div>
+                <div class="stat-card"><div class="label">日均观看</div><div class="value">${(total / dates.length).toFixed(1)}</div><div class="sub">条/天</div></div>
+            `;
+
+            // 每日统计
+            const dailyMap = {};
+            data.forEach(d => {
+                const key = formatDate(d.time);
+                dailyMap[key] = (dailyMap[key] || 0) + 1;
+            });
+            const dailyKeys = Object.keys(dailyMap).sort();
+            const dailyValues = dailyKeys.map(k => dailyMap[k]);
+
+            // 小时统计
+            const hourMap = {};
+            for (let i = 0; i < 24; i++) hourMap[i] = 0;
+            data.forEach(d => hourMap[d.time.getHours()]++);
+
+            // 星期统计
+            const weekMap = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0};
+            const weekNames = ['周日','周一','周二','周三','周四','周五','周六'];
+            data.forEach(d => weekMap[d.time.getDay()]++);
+
+            // UP主统计
+            const authorMap = {};
+            data.forEach(d => authorMap[d.author] = (authorMap[d.author] || 0) + 1);
+            const topAuthors = Object.entries(authorMap).sort((a,b) => b[1]-a[1]).slice(0, 15);
+
+            // 类型统计
+            const typeMap = {};
+            data.forEach(d => typeMap[d.type] = (typeMap[d.type] || 0) + 1);
+            const typeData = Object.entries(typeMap).sort((a,b) => b[1]-a[1]);
+
+            // 词频统计
+            const wordFreq = getWordFrequency(data.map(d => d.title));
+
+            // 洞察
+            const maxDay = dailyKeys[dailyValues.indexOf(Math.max(...dailyValues))];
+            const maxDayCnt = Math.max(...dailyValues);
+            const maxHour = Object.entries(hourMap).sort((a,b) => b[1]-a[1])[0];
+            const maxWeek = Object.entries(weekMap).sort((a,b) => b[1]-a[1])[0];
+            const lateNight = hourMap[22] + hourMap[23] + hourMap[0] + hourMap[1] + hourMap[2];
+
+            document.getElementById('insightBox').innerHTML = `
+                <h4>💡 观看习惯洞察</h4>
+                <ul>
+                    <li>📌 观看最多的一天是 <strong>${maxDay}</strong>，共观看 <strong>${maxDayCnt}</strong> 个视频</li>
+                    <li>⏰ 最活跃的时段是 <strong>${maxHour[0]}:00</strong>，共 <strong>${maxHour[1]}</strong> 条记录</li>
+                    <li>📅 观看最多的是 <strong>${weekNames[maxWeek[0]]}</strong>，共 <strong>${maxWeek[1]}</strong> 条记录</li>
+                    <li>🌙 深夜时段（22:00-02:00）共观看 <strong>${lateNight}</strong> 个视频，占比 <strong>${(lateNight/total*100).toFixed(1)}%</strong></li>
+                    <li>👑 最常看的UP主是 <strong>${topAuthors[0][0]}</strong>，共观看 <strong>${topAuthors[0][1]}</strong> 个视频</li>
+                    ${wordFreq.length > 0 ? `<li>🔤 最高频关键词是「<strong>${wordFreq[0][0]}</strong>」，出现 <strong>${wordFreq[0][1]}</strong> 次</li>` : ''}
+                </ul>
+            `;
+
+            // 渲染图表
+            renderDailyChart(dailyKeys, dailyValues);
+            renderHourChart(hourMap);
+            renderWeekChart(weekMap, weekNames);
+            renderAuthorChart(topAuthors);
+            renderTypeChart(typeData);
+            renderWordsChart(wordFreq);
+            renderRawTable(data);
+        }
+
+        // 简单中文分词（2-gram + 停用词过滤）
+        function getWordFrequency(titles) {
+            const wordMap = {};
+            titles.forEach(title => {
+                if (!title) return;
+                // 提取中文、英文、数字
+                const segments = title.match(/[\u4e00-\u9fa5]+|[a-zA-Z]+|[0-9]+/g) || [];
+                segments.forEach(seg => {
+                    if (/[\u4e00-\u9fa5]/.test(seg)) {
+                        // 中文：2-gram分词
+                        for (let i = 0; i < seg.length - 1; i++) {
+                            const word = seg.substring(i, i+2);
+                            if (!stopWords.has(word) && word.length >= 2) {
+                                wordMap[word] = (wordMap[word] || 0) + 1;
+                            }
+                        }
+                        // 3-gram for longer segments
+                        if (seg.length >= 3) {
+                            for (let i = 0; i < seg.length - 2; i++) {
+                                const word = seg.substring(i, i+3);
+                                if (!stopWords.has(word)) {
+                                    wordMap[word] = (wordMap[word] || 0) + 1;
+                                }
+                            }
+                        }
+                    } else {
+                        // 英文/数字
+                        const word = seg.toLowerCase();
+                        if (word.length >= 2 && !stopWords.has(word)) {
+                            wordMap[word] = (wordMap[word] || 0) + 1;
+                        }
+                    }
+                });
+            });
+            return Object.entries(wordMap).sort((a,b) => b[1]-a[1]).slice(0, 30);
+        }
+
+        // 每日趋势图
+        function renderDailyChart(keys, values) {
+            const chart = echarts.init(document.getElementById('chart-daily'));
+            charts.daily = chart;
+            chart.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 50, right: 30, top: 30, bottom: 60 },
+                xAxis: {
+                    type: 'category',
+                    data: keys,
+                    axisLabel: { rotate: 45, fontSize: 11 }
+                },
+                yAxis: { type: 'value', name: '观看条数' },
+                series: [{
+                    data: values,
+                    type: 'line',
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 6,
+                    itemStyle: { color: '#fb7299' },
+                    areaStyle: {
+                        color: {
+                            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                            colorStops: [
+                                { offset: 0, color: 'rgba(251,114,153,0.3)' },
+                                { offset: 1, color: 'rgba(251,114,153,0.05)' }
+                            ]
+                        }
+                    }
+                }],
+                dataZoom: [{ type: 'inside' }, { type: 'slider', height: 20, bottom: 10 }]
+            });
+        }
+
+        // 小时分布图
+        function renderHourChart(hourMap) {
+            const chart = echarts.init(document.getElementById('chart-hour'));
+            charts.hour = chart;
+            const hours = Object.keys(hourMap).map(Number);
+            const values = hours.map(h => hourMap[h]);
+            const maxVal = Math.max(...values);
+            chart.setOption({
+                tooltip: { trigger: 'axis', formatter: '{b}时: {c}条' },
+                grid: { left: 50, right: 30, top: 30, bottom: 40 },
+                xAxis: { type: 'category', data: hours.map(h => h + ':00') },
+                yAxis: { type: 'value', name: '视频条数' },
+                series: [{
+                    data: values.map(v => ({
+                        value: v,
+                        itemStyle: { color: v === maxVal ? '#fb7299' : '#23ade5' }
+                    })),
+                    type: 'bar',
+                    barWidth: '60%'
+                }]
+            });
+        }
+
+        // 星期分布图
+        function renderWeekChart(weekMap, weekNames) {
+            const chart = echarts.init(document.getElementById('chart-week'));
+            charts.week = chart;
+            const data = weekNames.map((name, i) => ({ name, value: weekMap[i] }));
+            chart.setOption({
+                tooltip: { trigger: 'axis', formatter: '{b}: {c}条' },
+                grid: { left: 50, right: 30, top: 30, bottom: 40 },
+                xAxis: { type: 'category', data: weekNames },
+                yAxis: { type: 'value', name: '视频条数' },
+                series: [{
+                    data: data.map(d => d.value),
+                    type: 'bar',
+                    barWidth: '50%',
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0,0,0,1,[
+                            { offset: 0, color: '#23ade5' },
+                            { offset: 1, color: '#fb7299' }
+                        ]),
+                        borderRadius: [4,4,0,0]
+                    }
+                }]
+            });
+        }
+
+        // UP主图
+        function renderAuthorChart(topAuthors) {
+            const chart = echarts.init(document.getElementById('chart-author'));
+            charts.author = chart;
+            const names = topAuthors.map(a => a[0]).reverse();
+            const values = topAuthors.map(a => a[1]).reverse();
+            chart.setOption({
+                tooltip: { trigger: 'axis', formatter: '{b}: {c}条' },
+                grid: { left: 120, right: 40, top: 20, bottom: 30 },
+                xAxis: { type: 'value', name: '观看条数' },
+                yAxis: { type: 'category', data: names, axisLabel: { fontSize: 12 } },
+                series: [{
+                    data: values,
+                    type: 'bar',
+                    barWidth: '60%',
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0,0,1,0,[
+                            { offset: 0, color: '#fb7299' },
+                            { offset: 1, color: '#ff9c6e' }
+                        ]),
+                        borderRadius: [0,4,4,0]
+                    },
+                    label: { show: true, position: 'right', fontSize: 11 }
+                }]
+            });
+        }
+
+        // 类型分布图
+        function renderTypeChart(typeData) {
+            const chart = echarts.init(document.getElementById('chart-type'));
+            charts.type = chart;
+            chart.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c}条 ({d}%)' },
+                legend: { orient: 'vertical', right: 20, top: 'center' },
+                series: [{
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    center: ['40%', '50%'],
+                    avoidLabelOverlap: true,
+                    itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+                    label: { show: true, formatter: '{b}\n{d}%' },
+                    data: typeData.map((t, i) => ({
+                        name: t[0],
+                        value: t[1],
+                        itemStyle: { color: ['#fb7299','#23ade5','#ff9c6e','#95de64','#ffd666','#b37feb','#69c0ff','#ff85c0'][i % 8] }
+                    }))
+                }]
+            });
+        }
+
+        // 词频图
+        function renderWordsChart(wordFreq) {
+            const chart = echarts.init(document.getElementById('chart-words'));
+            charts.words = chart;
+            if (wordFreq.length === 0) {
+                chart.setOption({ title: { text: '暂无词频数据', left: 'center', top: 'center', textStyle: { color: '#999' } } });
+                return;
+            }
+            const names = wordFreq.map(w => w[0]).reverse();
+            const values = wordFreq.map(w => w[1]).reverse();
+            chart.setOption({
+                tooltip: { trigger: 'axis', formatter: '{b}: {c}次' },
+                grid: { left: 100, right: 40, top: 20, bottom: 30 },
+                xAxis: { type: 'value', name: '出现次数' },
+                yAxis: { type: 'category', data: names, axisLabel: { fontSize: 11 } },
+                series: [{
+                    data: values,
+                    type: 'bar',
+                    barWidth: '70%',
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0,0,1,0,[
+                            { offset: 0, color: '#b37feb' },
+                            { offset: 1, color: '#fb7299' }
+                        ]),
+                        borderRadius: [0,4,4,0]
+                    }
+                }],
+                dataZoom: [{ type: 'slider', yAxisIndex: 0, orient: 'vertical', right: 10, width: 15 }]
+            });
+        }
+
+        // 原始数据表
+        function renderRawTable(data) {
+            const showData = data.slice(0, 100);
+            let html = '<table><thead><tr><th>序号</th><th>标题</th><th>UP主</th><th>观看时间</th><th>类型</th></tr></thead><tbody>';
+            showData.forEach((d, i) => {
+                html += `<tr>
+                    <td>${i+1}</td>
+                    <td>${escapeHtml(d.title)}</td>
+                    <td>${escapeHtml(d.author)}</td>
+                    <td>${formatDateTime(d.time)}</td>
+                    <td>${escapeHtml(d.type)}</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+            if (data.length > 100) {
+                html += `<div style="padding:12px;text-align:center;color:#999;font-size:13px;">仅显示前100条，共${data.length}条记录</div>`;
+            }
+            document.getElementById('rawTable').innerHTML = html;
+        }
+
+        // 工具函数
+        function formatDate(d) {
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        }
+        function formatDateTime(d) {
+            return formatDate(d) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        }
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str || '';
+            return div.innerHTML;
+        }
+        function resetPage() {
+            rawData = [];
+            Object.values(charts).forEach(c => c && c.dispose());
+            charts = {};
+            fileInput.value = '';
+            document.getElementById('uploadArea').classList.remove('hidden');
+            document.getElementById('fileInfo').classList.add('hidden');
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('resultArea').classList.add('hidden');
+        }
+
+        // 窗口大小变化时重绘图表
+        window.addEventListener('resize', () => {
+            Object.values(charts).forEach(c => c && c.resize());
+        });
+    </script>
+</body>
+</html>
