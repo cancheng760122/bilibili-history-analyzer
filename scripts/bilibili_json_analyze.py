@@ -21,7 +21,8 @@ plt.rcParams["axes.unicode_minus"] = False
 
 # -------------------------- 路径配置 --------------------------
 JSON_FILE_PATH = "bilibili-history-backup.json"
-OUTPUT_DIR = "output_json"
+date_str = datetime.now().strftime("%Y-%m-%d")
+OUTPUT_DIR = f"output/{date_str}_history_json"
 OUTPUT_CSV = os.path.join(OUTPUT_DIR, "bilibili_history_from_json.csv")
 REPORT_TXT = os.path.join(OUTPUT_DIR, "watch_report.txt")
 

@@ -5,6 +5,7 @@ B站观看记录数据分析脚本
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+from datetime import datetime
 
 # ========== 配置区 ==========
 # 把你的csv文件名放这里，和脚本放同一个文件夹
@@ -15,8 +16,10 @@ CSV_PATH = "bilibili-history-2026-09-11.csv"
 plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC", "Arial Unicode MS"]
 plt.rcParams["axes.unicode_minus"] = False
 
-# 创建输出文件夹，存放生成的图表
-os.makedirs("output", exist_ok=True)
+# 创建输出文件夹，按日期分类
+date_str = datetime.now().strftime("%Y-%m-%d")
+output_dir = f"output/{date_str}_history"
+os.makedirs(output_dir, exist_ok=True)
 
 # ========== 1. 读取数据 ==========
 df = pd.read_csv(CSV_PATH, encoding="utf-8-sig")
@@ -62,7 +65,7 @@ plt.title("观看最多的UP主 TOP15", fontsize=14)
 plt.xlabel("观看次数")
 plt.ylabel("UP主")
 plt.tight_layout()
-plt.savefig("output/top_authors.png", dpi=150)
+plt.savefig(f"{output_dir}/top_authors.png", dpi=150)
 plt.close()
 print("✅ 图表已保存：output/top_authors.png")
 
@@ -80,7 +83,7 @@ plt.xlabel("小时（北京时间）")
 plt.ylabel("观看次数")
 plt.xticks(rotation=0)
 plt.tight_layout()
-plt.savefig("output/hour_distribution.png", dpi=150)
+plt.savefig(f"{output_dir}/hour_distribution.png", dpi=150)
 plt.close()
 print("✅ 图表已保存：output/hour_distribution.png")
 
@@ -99,7 +102,7 @@ plt.xlabel("星期")
 plt.ylabel("观看次数")
 plt.xticks(rotation=0)
 plt.tight_layout()
-plt.savefig("output/weekday_distribution.png", dpi=150)
+plt.savefig(f"{output_dir}/weekday_distribution.png", dpi=150)
 plt.close()
 print("✅ 图表已保存：output/weekday_distribution.png")
 
@@ -117,7 +120,7 @@ plt.xlabel("日期")
 plt.ylabel("观看次数")
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig("output/daily_trend.png", dpi=150)
+plt.savefig(f"{output_dir}/daily_trend.png", dpi=150)
 plt.close()
 print("✅ 图表已保存：output/daily_trend.png")
 
@@ -133,7 +136,7 @@ type_dist.plot(kind="pie", autopct="%1.1f%%", startangle=90)
 plt.title("观看内容类型占比", fontsize=14)
 plt.ylabel("")
 plt.tight_layout()
-plt.savefig("output/type_distribution.png", dpi=150)
+plt.savefig(f"{output_dir}/type_distribution.png", dpi=150)
 plt.close()
 print("✅ 图表已保存：output/type_distribution.png")
 
@@ -164,7 +167,7 @@ report = f"""
 print(report)
 
 # 保存报告到文件
-with open("output/analysis_report.txt", "w", encoding="utf-8") as f:
+with open(f"{output_dir}/analysis_report.txt", "w", encoding="utf-8") as f:
     f.write(report)
 print("✅ 文字报告已保存：output/analysis_report.txt")
 print("\n🎉 全部分析完成！图表和报告都在 output 文件夹里。")
